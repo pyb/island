@@ -1,0 +1,28 @@
+Valeurs
+	Achat	  Vente
+Pop     500
+Agri    50	  25
+Bato    100	  50
+Mine	3000(-10 pop)
+Merc 	500
+(2000/tour)
+
+
+Pop 10% par tour avec agri
+Max pop = 1.1*agri
+
+Attaque : pop + bato ou merc
+
+
+
+
+Move dest source n   
+Buy i
+Sell i
+End (turn)
+
+
+
+Toutes forces d'attaque s'ajoutent
+Si l'ile est prise, celui qui a le + de forces prend (Avec le min de (attaque - defense, attaque - autres attaques))
+
