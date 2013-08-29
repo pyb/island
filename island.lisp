@@ -13,6 +13,16 @@
    (agri :initform 100)
    (mine :initform 0)))
 
+(defmethod print-object ((i island) stream)
+  (format stream "Island ~A ~A (p~A b~A a~A m~A)" 
+	  (slot-value i 'n)
+	  (awhen (proprio i)
+	    (player-name it))
+	  (slot-value i 'pop)
+	  (slot-value i 'bato)
+	  (slot-value i 'agri)
+	  (slot-value i 'mine)))
+
 (defun generate-islands (n)
   (let (islands)
     (dotimes (i n)
@@ -264,7 +274,9 @@
 
 ;; For 1 island
 (defun resolve-fight (island attacks) ; attacks = list of  (dest player n bato?)
+  (format t "Merging ~A~%" attacks)
   (let ((attacks (merge-all-attacks attacks)))
+    (format t "Resolving ~A~%" attacks)
     (with-slots (pop bato) 
 	island
       (let ((attacks (sort (mapcar #'rest attacks)
@@ -279,6 +291,7 @@
 	      (total (reduce #'+
 			     attacks
 			     :key #'second)))
+	  (format t "winner ~A total ~A defense ~A defender ~A~%" winner total defense defender)
 	  (if (<= total defense)
 	      (progn
 		(decf pop
@@ -303,17 +316,18 @@
 			      (min (- total defense)
 				   (- attack-pop second-attack)))
 			(incf bato
-			      (third (first attacks)))))))))))))
+			      pop)))))))))))
 
 (defun regroup (list &key (key #'identity))
   (when list
     (let ((item (funcall key (first list))))
       (cons (remove item list :key key :test-not #'eql)
-	    (regroup (remove item list :key key))))))
+	    (regroup (remove item list :key key) :key key)))))
 
 ;;attack : (dest player n bato?)
 ;; Group attacks by island, merge from same attacker
 (defun resolve-attacks (attacks)
+  (format t "Grouping ~A~%" attacks)
   (dolist (attack-group (regroup attacks :key #'first))
     (let ((island (first (first attack-group))))
       (resolve-fight island attack-group))))
