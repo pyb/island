@@ -1,2 +1,13 @@
 island game, clone of the HP48 classic by Mathieu Peyral
 
+Briefly, this is a resource management game where you have to take control of all the islands. Island population increases by 10% every turn, provided there is enough agriculture. Each Mine brings 2000 gold each turn. Conquer islands by moving your population across or sending mercenaries.
+
+The commands are Buy, Sell and Move : 
+b 2 pop 10 : buy 10 population on island 2
+s 5 agri 4 : sell 4 agriculture on island 5
+m 6 7 10 : move 10 population from island 7 to island 6 (this is an attack if you don't own island 6). Make sure you have enough boats ('bato')
+m 6 10 : attack island 6 with 10 mercenaries 
+e : end turn
+
+Moves and attacks are only resolved after every player has completed his turn.
+

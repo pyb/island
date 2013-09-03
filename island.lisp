@@ -46,30 +46,6 @@
 (defun proprio (island)
   (find island *player-list* :key #'player-islands :test #'member))
 
-(defun display-island (island player)
-  (with-slots (n pop agri bato mine) 
-      island
-    (format t "Island ~A " n)
-    (if (eql player
-	     (proprio island))
-	(progn
-	  (format t "pop ~A " pop)
-	  (format t "agri ~A " agri)
-	  (format t "bato ~A " bato)
-	  (format t "mine ~A " mine))
-	(progn
-	  (awhen (proprio island)
-	    (format t "*~A*" (player-name it)))))
-    (terpri)))
-  
-(defun ui-island (islands player)
-  (dolist (island islands)
-    (display-island island player)))
-
-(defun ui (&optional (player (current-player)))
-  (format t "Player *~A*  ---  £~A~%" (player-name player) (player-gold player))
-  (ui-island *islands* player))
-
 (defun find-island (n)
   (find n *islands*
 	:key (lambda (i)
@@ -94,8 +70,8 @@
     (agri (50 0) 25)))
 
 (defparameter *merc-cost* 500)
-    
 
+(defparameter *mine-yield* 2000)
 
 ;;;;-------------------------------------------
 
@@ -225,10 +201,7 @@
 	    *player-list*)
       (format t "Next turn (Y)~%") 
       (while (not (eql 'Y (read)))))))
-
-
-(defparameter *mine-yield* 2000)
-	
+ 	
 (defun update-resources (islands)
   (dolist (i islands)
     (with-slots (pop mine agri)
@@ -343,3 +316,30 @@
      (next-command (current-player))
      (format t "~%~%~%~%~%~%~%~%~%~%~%~%~%~%")))
 
+
+
+;;-----------------------------------------------------------
+
+(defun display-island (island player)
+  (with-slots (n pop agri bato mine) 
+      island
+    (format t "Island ~A " n)
+    (if (eql player
+	     (proprio island))
+	(progn
+	  (format t "pop ~A " pop)
+	  (format t "agri ~A " agri)
+	  (format t "bato ~A " bato)
+	  (format t "mine ~A " mine))
+	(progn
+	  (awhen (proprio island)
+	    (format t "*~A*" (player-name it)))))
+    (terpri)))
+  
+(defun ui-island (islands player)
+  (dolist (island islands)
+    (display-island island player)))
+
+(defun ui (&optional (player (current-player)))
+  (format t "Player *~A*  ---  £~A~%" (player-name player) (player-gold player))
+  (ui-island *islands* player))
