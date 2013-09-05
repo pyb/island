@@ -77,6 +77,8 @@
 
 (defparameter *attacks* nil) ; dynamic
 
+(defparameter *messages* nil)
+
 (defun display-and-convert-command (command)
   (when (listp command)
     (let ((c (first command))
@@ -112,23 +114,35 @@
 				       (progn (setf good nil) "How many mercs?"))))
 			     (progn (setf good nil) "No destination")))
 	       (t (setf good nil)))))
-	(values good str command)))))
+	(push str *messages*)
+	(values good command)))))
 
 (defun next-command (player)
   (format t "What now ? (Buy / Sell / Move / End) ")
   (let ((command (read-from-string (concatenate 'string 
 						"(" (read-line) ")"))))
-    (Format t "C : ~A~%" command)
-    (multiple-value-bind (good str command)
+    (format t "Next command : ~A~%" command)
+    command))
+
+(defun process-command (command player)
+  (apply (second (assoc (first command)
+			*command-table*
+			:test #'member))
+	 (rest command)))
+
+(defun process-next-command (player)
+  (setf *messages* nil)
+  (let ((command (next-command player)))
+    (multiple-value-bind (good command)
 	(display-and-convert-command command)
-      (format t "~A (~A)~%" str command)
       (when good
-	(format t "Are you sure (y/n) ?")
-	(when (eql 'Y (read))
-	  (apply (second (assoc (first command)
-				*command-table*
-				:test #'member))
-		   (rest command)))))))
+	(process-command command player)
+	(show-messages (reverse *messages*))))))
+
+(defun show-messages (messages)
+  (dolist (m messages)
+    (format t "~A~%" m)))
+
 
 (defun buy (island item qty)
   (when (member island
@@ -137,34 +151,39 @@
 	island
       (bind (item (buy-price buy-pop) sell-price)
 	  (assoc item *prices*)
-	(when (and item
+	(if (and item
 		   (>= (player-gold (current-player)) (* qty buy-price))
 		   (>= pop (* qty buy-pop))
 		   (or (<= mine 5) (not (eql 'mine item))))
 	  (prog1 t
+	    (push (format nil "Buying...") *messages*)
 	    (decf (player-gold (current-player)) (* qty buy-price))
 	    (decf pop (* qty buy-pop))
 	    (incf (slot-value island item)
-		  qty)))))))
-	      
+		  qty))
+	  (push (format nil "Cannot buy !") *messages*))))))
+
 (defun sell (island item qty)
   (when (member island
 		(player-islands (current-player)))
     (bind (item (buy-price buy-pop) sell-price)
 	(assoc item *prices*)
-      (when (and item
+      (if (and item
 		 sell-price
 		 (<= qty
 		     (slot-value island item)))
 	(prog1 t
+	  (push (format nil "Selling...") *messages*)
 	  (incf (player-gold (current-player)) (* qty sell-price))
 	  (decf (slot-value island item)
-		qty))))))
+		qty))
+	(push (format nil "Could not sell !") *messages*)))))
+
 
 (defun move (dest &key source n)
-  (format t "Moving : ~A ~A ~A~%" dest source n)
+  (push (format nil "Moving : ~A ~A ~A~%" dest source n) *messages*)
   (cond ((eql dest source)
-	 (format t "Same destination~%"))
+	 (push (format nil "Same destination~%") *messages*))
 	((null source)
 	 (when (>= (player-gold (current-player)) (* n *merc-cost*))
 	   (decf   (player-gold (current-player)) (* n *merc-cost*))
@@ -312,9 +331,9 @@
   
 (defun game ()
   (loop 
-     (ui (current-player))
-     (next-command (current-player))
-     (format t "~%~%~%~%~%~%~%~%~%~%~%~%~%~%")))
+     (print-status (current-player))
+     (process-next-command (current-player))
+     (format t "~%")))
 
 
 
@@ -340,6 +359,6 @@
   (dolist (island islands)
     (display-island island player)))
 
-(defun ui (&optional (player (current-player)))
+(defun print-status (&optional (player (current-player)))
   (format t "Player *~A*  ---  £~A~%" (player-name player) (player-gold player))
   (ui-island *islands* player))
