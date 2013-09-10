@@ -16,7 +16,8 @@
   islands
   gold
   fd
-  socket)
+  socket
+  finished?)
 
 (defclass island ()
   ((n :initarg :n)
@@ -45,27 +46,22 @@
 (defparameter *islands*
   (generate-islands 20))
   
-(defparameter *player-list* 
+(defparameter *players* 
   (list (make-player :name "Alain" :n 1 :gold 10000 :islands (list (first *islands*)))
 	(make-player :name "Pyb" :n 2 :gold 10000 :islands (list (second *islands*)))))
 
-(defparameter *players*
-  *player-list*)
-
-(defun current-player ()
-  (first *players*))
+(defparameter *current-player* nil)
 
 (defun proprio (island)
-  (find island *player-list* :key #'player-islands :test #'member))
+  (find island *players* :key #'player-islands :test #'member))
 
 (defun find-island (n)
   (find n *islands*
 	:key (lambda (i)
 	       (slot-value i 'n))))
 
-(defun init (&optional (players *player-list*))
-  (setf *players* players)
-  (dolist (p players)
+(defun init ()
+  (dolist (p *players*)
     (let ((i (first (player-islands p))))
       (with-slots (pop bato)
 	  i
@@ -125,7 +121,7 @@
 					 (setf command `(move ,(find-island dest) :n ,n)))
 				       (progn (setf good nil) "How many mercs?"))))
 			     (progn (setf good nil) "No destination")))
-	       (t (setf good nil)))))
+	       (t (progn (setf good nil) "Unknown command")))))
 	(message str)
 	(values good command)))))
 
@@ -137,32 +133,35 @@
 
 (defun process-next-command (player)
   (setf *messages* nil)
-  (let ((command (next-command player)))
-    (multiple-value-bind (good command)
-	(display-and-convert-command command)
-      (when good
-	(process-command command player)
-	(show-messages (reverse *messages*) player)))))
+  (setf *current-player* player)
+  (if-let ((command (next-command player)))
+    (unless (player-finished? player)
+      (multiple-value-bind (good command)
+	  (display-and-convert-command command)
+	(when good
+	  (process-command command player))
+	(show-messages (reverse *messages*) player)))
+    (print-status player)))
 
 (defun show-messages (messages player)
   (dolist (m messages)
-    (write-message m)))
+    (write-message m player)))
 
 
 (defun buy (island item qty)
   (when (member island
-		(player-islands (current-player)))
+		(player-islands *current-player*))
     (with-slots (pop mine)
 	island
       (bind (item (buy-price buy-pop) sell-price)
 	  (assoc item *prices*)
 	(if (and item
-		   (>= (player-gold (current-player)) (* qty buy-price))
+		   (>= (player-gold *current-player*) (* qty buy-price))
 		   (>= pop (* qty buy-pop))
 		   (or (<= mine 5) (not (eql 'mine item))))
 	  (prog1 t
 	    (message "Buying...")
-	    (decf (player-gold (current-player)) (* qty buy-price))
+	    (decf (player-gold *current-player*) (* qty buy-price))
 	    (decf pop (* qty buy-pop))
 	    (incf (slot-value island item)
 		  qty))
@@ -170,7 +169,7 @@
 
 (defun sell (island item qty)
   (when (member island
-		(player-islands (current-player)))
+		(player-islands *current-player*))
     (bind (item (buy-price buy-pop) sell-price)
 	(assoc item *prices*)
       (if (and item
@@ -179,7 +178,7 @@
 		     (slot-value island item)))
 	(prog1 t
 	  (message "Selling...")
-	  (incf (player-gold (current-player)) (* qty sell-price))
+	  (incf (player-gold *current-player*) (* qty sell-price))
 	  (decf (slot-value island item)
 		qty))
 	(message "Could not sell !")))))
@@ -194,41 +193,38 @@
   (cond ((eql dest source)
 	 (message "Same destination !~%"))
 	((null source)
-	 (when (>= (player-gold (current-player)) (* n *merc-cost*))
-	   (decf   (player-gold (current-player)) (* n *merc-cost*))
-	   (push (list dest (current-player) n 0)
+	 (when (>= (player-gold *current-player*) (* n *merc-cost*))
+	   (decf   (player-gold *current-player*) (* n *merc-cost*))
+	   (push (list dest *current-player* n 0)
 		 *attacks*)))
 	(t (when (member source
-			 (player-islands (current-player)))
+			 (player-islands *current-player*))
 	     (with-slots (pop bato)
 		 source
 	       (when (and (>= pop n)
 			  (>= bato n))
 		 (decf bato n)
 		 (decf pop n)
-		 (push (list dest (current-player) n n)
+		 (push (list dest *current-player* n n)
 		       *attacks*)))))))
  
-(defun end ()
-  (prog1 t
-    (format t "~%~%~%~%~%~%~%~%~%~%~%~%~%~%")
-    (format t "~A , Please pass to next player (Y)~%" (player-name (current-player)))
-    (while (not (eql 'Y (read))))
-    (setf *players*
-	  (rest *players*))
-    (unless *players*
-      (format t "About to resolve conflicts... (Y)~%") 
-      (while (not (eql 'Y (read))))
-      (resolve-attacks *attacks*)
-      (update-resources *islands*)
-      (dolist (p *player-list*)
-	(unless (player-islands p)
-	  (destroy-player p)))
-      (setf *attacks* nil)
-      (setf *players*
-	    *player-list*)
-      (format t "Next turn (Y)~%") 
-      (while (not (eql 'Y (read)))))))
+(defun end (&optional (player *current-player*))
+  (write-message (format nil "~A , your turned is finished. Please wait. All commands ignored.~%" (player-name player))
+		 player)
+  (broadcast (format nil "~A finished his turn.~%" (player-name player)))
+  (setf (player-finished? player)
+	t)
+  (unless (find nil *players*
+		:key #'player-finished?)
+    (format t "About to resolve conflicts...~%") 
+    (resolve-attacks *attacks*)
+    (update-resources *islands*)
+    (dolist (p *players*)
+      (unless (player-islands p)
+	(destroy-player p)))
+    (setf *attacks* nil)
+    (broadcast "Next turn.~%")
+    (format t "Next turn.~%")))
  	
 (defun update-resources (islands)
   (dolist (i islands)
@@ -333,10 +329,15 @@
     (let ((island (first (first attack-group))))
       (resolve-fight island attack-group))))
 
+(defun broadcast (message)
+  (dolist (player *players*)
+    (write-message message
+		   player)))
+  
 (defun destroy-player (p)
-  (format t "Player ~A just died.~%" p)
-  (setf *players* (remove p *players*)
-	*player-list* (remove p *player-list*)))
+  (broadcast (format nil "Player ~A just died.~%" p))
+  (write-message "Yes, you died.~%" p)
+  (setf *players* (remove p *players*)))
   
 
 
@@ -356,15 +357,15 @@
 	  (write-message (format nil "mine ~A " mine) player))
 	(progn
 	  (awhen (proprio island)
-	    (write-message (format t "*~A*" (player-name it)) player))))
+	    (write-message (format nil "*~A*" (player-name it)) player))))
     (write-message (format nil "~%") player)))
 
 (defun ui-island (islands player)
   (dolist (island islands)
     (display-island island player)))
 
-(defun print-status (&optional (player (current-player)))
-  (write-message (format nil "Player *~A*  ---  £~A~%" (player-name player) (player-gold player)) 
+(defun print-status (player)
+  (write-message (format nil "Player *~A*  ---  £~A~%" (player-name player) (player-gold player))
 		 player)
   (ui-island *islands* player))
 
@@ -404,6 +405,7 @@
 							 *players*)))
 			 :timeout? nil
 			 :fdsets fdsets)
+	 (format t "Read something...~%")
 	 (cond ((member *srv-socket-fd* readfds) 
 		(open-new-connection *srv-socket*))
 	       (t
@@ -413,25 +415,29 @@
 		    (read-command player)
 		    (process-next-command player)))))))))
 
-(let ((n 0))		      
-  (defun open-new-connection (srv-socket)
-    (if (> n 1)
-	(error "Too many connections")
-	(mvbind (socket address port)
-	     (socket-accept srv-socket)
-	   (when socket
-	     (setf (non-blocking-mode socket)
-		   t)
-	     (format t "Opening new conn with fd ~A~%" (socket-file-descriptor socket))
-	     (let ((player (elt *players*
-				n)))
+(defparameter *nconnections* 0)
+
+(defun open-new-connection (srv-socket)
+  (mvbind (socket address port)
+       (socket-accept srv-socket)
+     (when socket
+       (setf (non-blocking-mode socket)
+	     t)
+       (format t "Opening new conn with fd ~A~%" (socket-file-descriptor socket))
+       (let ((player (find nil
+			   *players*
+			   :key #'player-fd)))
+	 (if (null player)
+	     (error "Too many connections")
+	     (progn
 	       (setf (player-socket player) socket
 		     (player-fd     player) (socket-file-descriptor socket))
-	       (incf n)))))))
+	       (write-message "Welcome !" player)
+	       (incf *nconnections*)))))))
 
 (defun write-message (message player)
   (socket-send (player-socket player)
-	       (format nil "~A~%" message)
+	       (format nil "~A" message)
 	       nil))
 
 (define-constant +max-command-length+ 100)
@@ -439,13 +445,31 @@
 (defparameter *command* nil)
 
 (defun next-command (player)
-  (prog1 *command*
-    (setf *command* nil)))
+  *command*)
+
+(defun kill-connection (player)
+  (format t "Player ~A disconnected~%" player)
+  (setf (player-fd player) 
+	nil))
 
 (defun read-command (player)
-  (let ((command (socket-receive (player-socket player)
-				 nil  ; buffer
-				 +max-command-length+
-				 :element-type '(unsigned-byte 8))))
-    (format t "Command received ~S~%" command)
-    (setf *command* command)))
+  (format t "Receiving...~%")
+  (multiple-value-bind (command length)
+      (socket-receive (player-socket player)
+		      nil  ; buffer
+		      +max-command-length+
+		      :element-type 'character)
+    (if (zerop length)
+	(kill-connection player)
+	(progn
+	  (setf *command* 
+		(read-from-string (concatenate 'string
+					       "("
+					       (subseq command 0 (1- length)) ; carriage return ignored
+					       ")")))
+	  (format t "Command received ~S length ~A~%" *command* length)))))
+
+
+(init)
+(transport-init)
+;(transport-thread)
