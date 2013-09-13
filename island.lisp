@@ -99,29 +99,29 @@
 	       ((e end) "End turn")
 	       ((b buy) (if a4
 			    (prog1
-				(format nil "Buy ~A ~A on island ~A" a4 a3 dest)
+				(format nil "Buy ~A ~A on island ~A~%" a4 a3 dest)
 			      (setf (second command)
 				    (find-island dest)))
-			    (progn (setf good nil) "Buy what ?")))
+			    (progn (setf good nil) "Buy what ?~%")))
 	       ((s sell) (if a4 
 			     (prog1
-				 (format nil "Sell ~A ~A from island ~A" a4 a3 dest)
+				 (format nil "Sell ~A ~A from island ~A~%" a4 a3 dest)
 			       (setf (second command)
 				     (find-island dest)))
-			     (progn (setf good nil) "Sell what ?")))
+			     (progn (setf good nil) "Sell what ?~%")))
 	       ((m move) (if dest 
 			     (if a4
 				 (prog1
-				     (format nil "Move/attack with ~A troops from ~A to ~A" a4 a3 dest)
+				     (format nil "Move/attack with ~A troops from ~A to ~A~%" a4 a3 dest)
 				   (setf command `(move ,(find-island dest) :source ,(find-island a3) :n ,a4)))
 				 (let ((n a3))
 				   (if n
 				       (prog1
-					   (format nil "~A mercs to island ~A" n dest )
+					   (format nil "~A mercs to island ~A~%" n dest )
 					 (setf command `(move ,(find-island dest) :n ,n)))
-				       (progn (setf good nil) "How many mercs?"))))
-			     (progn (setf good nil) "No destination")))
-	       (t (progn (setf good nil) "Unknown command")))))
+				       (progn (setf good nil) "How many mercs?~%"))))
+			     (progn (setf good nil) "No destination~%")))
+	       (t (progn (setf good nil) "Unknown command~%")))))
 	(message str)
 	(values good command)))))
 
@@ -142,6 +142,7 @@
 	  (process-command command player))
 	(show-messages (reverse *messages*) player)))
     (print-status player)))
+
 
 (defun show-messages (messages player)
   (dolist (m messages)
@@ -189,7 +190,7 @@
 	*messages*))
 
 (defun move (dest &key source n)
-  (message "Moving : ~A ~A ~A~%" dest source n)
+  (message "Moving : ~A ~A ~A~%" (when dest (slot-value dest 'n)) (when source (slot-value source 'n)) n)
   (cond ((eql dest source)
 	 (message "Same destination !~%"))
 	((null source)
@@ -205,11 +206,15 @@
 			  (>= bato n))
 		 (decf bato n)
 		 (decf pop n)
-		 (push (list dest *current-player* n n)
-		       *attacks*)))))))
+		 (if (eql *current-player*
+			  (proprio dest))
+		     (incf (slot-value dest 'pop)
+			   n)
+		     (push (list dest *current-player* n n)
+			   *attacks*))))))))
  
 (defun end (&optional (player *current-player*))
-  (write-message (format nil "~A , your turned is finished. Please wait. All commands ignored.~%" (player-name player))
+  (write-message (format nil "~A , your turn is finished. Please wait. All commands ignored.~%" (player-name player))
 		 player)
   (broadcast (format nil "~A finished his turn.~%" (player-name player)))
   (setf (player-finished? player)
@@ -220,9 +225,13 @@
     (resolve-attacks *attacks*)
     (update-resources *islands*)
     (dolist (p *players*)
-      (unless (player-islands p)
-	(destroy-player p)))
+      (progn
+	(setf (player-finished? p)
+	      nil)
+	(unless (player-islands p)
+	  (destroy-player p))))
     (setf *attacks* nil)
+    (incf *turn*)
     (broadcast "Next turn.~%")
     (format t "Next turn.~%")))
  	
@@ -364,8 +373,10 @@
   (dolist (island islands)
     (display-island island player)))
 
+(defparameter *turn* 1)
+
 (defun print-status (player)
-  (write-message (format nil "Player *~A*  ---  £~A~%" (player-name player) (player-gold player))
+  (write-message (format nil "~%Turn ~A~% Player *~A*  ---  £~A~%" *turn* (player-name player) (player-gold player))
 		 player)
   (ui-island *islands* player))
 
